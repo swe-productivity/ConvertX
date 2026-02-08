@@ -1,4 +1,6 @@
 const webroot = document.querySelector("meta[name='webroot']").content;
+const urlInput = document.querySelector("#url-input");
+const urlSubmit = document.querySelector("#url-submit");
 const fileInput = document.querySelector('input[type="file"]');
 const dropZone = document.getElementById("dropzone");
 const convertButton = document.querySelector("input[type='submit']");
@@ -32,6 +34,35 @@ dropZone.addEventListener("drop", (e) => {
     handleFile(file);
   }
 });
+
+urlSubmit.addEventListener("click", (e) => {
+  e.preventDefault();
+  handleUrl(urlInput.value);
+});
+
+function handleUrl(url) {
+  fetch(`${webroot}/url`, {
+    method: "POST",
+    body: JSON.stringify({ url }),
+    headers: { "Content-Type": "application/json" },
+  })
+    .then((res) => res.json())
+    .then((res) => {
+      const fileList = document.querySelector("#file-list");
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${res.filename}</td>
+        <td></td>
+        <td>${(res.fileSizeBytes / 1024).toFixed(2)} kB</td>
+        <td><a onclick="deleteRow(this)">Remove</a></td>
+      `;
+
+      fileList.appendChild(row);
+      fileNames.push(res.filename);
+    })
+    .catch(console.error);
+}
 
 // Extracted handleFile function for reusability in drag-and-drop and file input
 function handleFile(file) {
