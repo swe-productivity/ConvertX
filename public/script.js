@@ -16,20 +16,49 @@ dropZone.addEventListener("dragleave", () => {
   dropZone.classList.remove("dragover");
 });
 
-dropZone.addEventListener("drop", (e) => {
+const entryToFiles = async (entry) => {
+  if (entry.isFile) {
+    const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+    return [file];
+  }
+  const reader = entry.createReader();
+  const entries = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+  const out = [];
+  for (const entry of entries) {
+    out.push(...(await entryToFiles(entry)));
+  }
+  return out;
+};
+
+const getFileNameWithSlashes = (file) => {
+  if (file.webkitRelativePath) {
+    return file.webkitRelativePath;
+  } else {
+    return file.name;
+  }
+};
+
+dropZone.addEventListener("drop", async (e) => {
   e.preventDefault();
   dropZone.classList.remove("dragover");
 
-  const files = e.dataTransfer.files;
+  const items = e.dataTransfer.items;
 
-  if (files.length === 0) {
+  if (items.length === 0) {
     console.warn("No files dropped — likely a URL or unsupported source.");
     return;
   }
 
-  for (const file of files) {
-    console.log("Handling dropped file:", file.name);
-    handleFile(file);
+  for (const item of items) {
+    const entry = item.webkitGetAsEntry();
+    if (!entry) {
+      return;
+    }
+    const files = await entryToFiles(entry);
+    for (const file of files) {
+      console.log("Handling dropped file:", getFileNameWithSlashes(file));
+      handleFile(file);
+    }
   }
 });
 
@@ -39,14 +68,14 @@ function handleFile(file) {
 
   const row = document.createElement("tr");
   row.innerHTML = `
-    <td>${file.name}</td>
+    <td>${getFileNameWithSlashes(file)}</td>
     <td><progress max="100" class="inline-block h-2 appearance-none overflow-hidden rounded-full border-0 bg-neutral-700 bg-none text-accent-500 accent-accent-500 [&::-moz-progress-bar]:bg-accent-500 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:[background:none] [&[value]::-webkit-progress-value]:bg-accent-500 [&[value]::-webkit-progress-value]:transition-[inline-size]"></progress></td>
     <td>${(file.size / 1024).toFixed(2)} kB</td>
     <td><a onclick="deleteRow(this)">Remove</a></td>
   `;
 
   if (!fileType) {
-    fileType = file.name.split(".").pop();
+    fileType = getFileNameWithSlashes(file).split(".").pop();
     fileInput.setAttribute("accept", `.${fileType}`);
     setTitle();
 
@@ -65,7 +94,7 @@ function handleFile(file) {
 
   fileList.appendChild(row);
   file.htmlRow = row;
-  fileNames.push(file.name);
+  fileNames.push(getFileNameWithSlashes(file));
   uploadFile(file);
 }
 
@@ -202,7 +231,7 @@ const uploadFile = (file) => {
   pendingFiles += 1;
 
   const formData = new FormData();
-  formData.append("file", file, file.name);
+  formData.append("file", file, getFileNameWithSlashes(file));
 
   let xhr = new XMLHttpRequest();
 
@@ -228,7 +257,7 @@ const uploadFile = (file) => {
   xhr.upload.onprogress = (e) => {
     let sent = e.loaded;
     let total = e.total;
-    console.log(`upload progress (${file.name}):`, (100 * sent) / total);
+    console.log(`upload progress (${getFileNameWithSlashes(file)}):`, (100 * sent) / total);
 
     let progressbar = file.htmlRow.getElementsByTagName("progress");
     progressbar[0].value = (100 * sent) / total;
