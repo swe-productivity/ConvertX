@@ -21,6 +21,7 @@
     "@elysiajs/static": "^1.4.6",
     "@kitajs/html": "^4.2.11",
     "elysia": "^1.4.16",
+    "mime": "^4.1.0",
     "sanitize-filename": "^1.6.3",
     "tar": "^7.5.2"
   },
