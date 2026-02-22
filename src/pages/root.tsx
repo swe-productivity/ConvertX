@@ -152,7 +152,7 @@ export const root = new Elysia().use(userService).get(
                   class="absolute inset-0 size-full cursor-pointer opacity-0"
                 />
               </div>
-              <label class="mt-4 flex flex-col gap-1">
+              <label class="mt-4 flex flex-col gap-1 text-neutral-400">
                 Or enter a URL
                 <div class="flex flex-row">
                   <input
