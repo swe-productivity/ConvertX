@@ -5,6 +5,7 @@ import { WEBROOT } from "../helpers/env";
 import { userService } from "./user";
 import sanitize from "sanitize-filename";
 import { randomUUID } from "node:crypto";
+import mime from "mime";
 
 const getFilename = (url: string, headers: Headers) => {
   const contentDisposition = headers.get("Content-Disposition");
@@ -16,8 +17,16 @@ const getFilename = (url: string, headers: Headers) => {
   }
   const path = new URL(url).pathname;
   const lastPart = path.split("/").at(-1);
+  const contentType = headers.get("content-type");
+  const extension = contentType ? mime.getExtension(contentType) : null;
   if (!lastPart) {
+    if (extension) {
+      return `${randomUUID()}.${extension}`;
+    }
     return randomUUID();
+  }
+  if (!lastPart.includes(".") && extension) {
+    return `${sanitize(lastPart)}.${extension}`;
   }
   return sanitize(lastPart);
 };
