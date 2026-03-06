@@ -58,6 +58,7 @@ const refreshData = () => {
   progressElem = document.querySelector("progress");
 };
 
+setupShareButtons();
 refreshData();
 
 window.downloadAll = function () {
