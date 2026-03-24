@@ -1,4 +1,8 @@
 import { Cookie } from "elysia";
+import AdmZip from "adm-zip";
+import { unlink, rename, stat } from "node:fs/promises";
+import path from "node:path";
+import sanitize from "sanitize-filename";
 import db from "../db/db";
 import { MAX_CONVERT_PROCESS } from "../helpers/env";
 import { normalizeFiletype, normalizeOutputFiletype } from "../helpers/normalizeFiletype";
@@ -148,6 +152,129 @@ function chunks<T>(arr: T[], size: number): T[][] {
   );
 }
 
+async function handleMultiFrameOutput(
+  targetPath: string,
+  newFileName: string,
+  userOutputDir: string,
+): Promise<string> {
+  const targetFile = Bun.file(targetPath);
+  const exists = await targetFile.exists();
+
+  if (exists) {
+    // Target file exists as expected, return unchanged
+    return newFileName;
+  }
+
+  // Target file doesn't exist, multi-frame detection will be needed
+  console.log(`Multi-frame detection needed for: ${newFileName}`);
+  console.log(`Expected file not found: ${targetPath}`);
+
+  // Extract base filename and extension
+  const lastDotIndex = newFileName.lastIndexOf(".");
+  const baseFileName = lastDotIndex > 0 ? newFileName.substring(0, lastDotIndex) : newFileName;
+  const extension = lastDotIndex > 0 ? newFileName.substring(lastDotIndex + 1) : "";
+
+  // Sanitize: strip path separators then apply sanitize-filename to prevent path traversal
+  const safeBaseFileName = sanitize(baseFileName.replace(/[/\\]/g, ""));
+
+  console.log(`Base filename: ${safeBaseFileName}, Extension: ${extension}`);
+
+  // Escape glob metacharacters in baseFileName to prevent pattern injection
+  const escapedBaseFileName = safeBaseFileName.replace(/[*?[\]{}!\\]/g, "\\$&");
+
+  // Search for frame files matching pattern: baseFileName-*.extension
+  const framePattern = `${escapedBaseFileName}-*.${extension}`;
+  const glob = new Bun.Glob(framePattern);
+  const frameFiles: string[] = [];
+
+  // Scan the output directory for matching files
+  for await (const file of glob.scan({ cwd: userOutputDir, onlyFiles: true })) {
+    frameFiles.push(file);
+  }
+
+  console.log(`Detected ${frameFiles.length} frame file(s):`);
+  for (const frameFile of frameFiles) {
+    console.log(`  - ${frameFile}`);
+  }
+
+  // Handle based on number of frame files detected
+  if (frameFiles.length === 0) {
+    throw new Error(`No output files generated for ${newFileName}`);
+  }
+
+  if (frameFiles.length === 1) {
+    // Single frame: rename to expected target path
+    const frame = frameFiles[0]!;
+    const singleFramePath = path.join(userOutputDir, frame);
+    console.log(`Renaming single frame: ${frameFiles[0]} -> ${newFileName}`);
+    await rename(singleFramePath, targetPath);
+    return newFileName;
+  }
+
+  // Multiple frames: create a zip archive
+  console.log(`Creating zip archive for ${frameFiles.length} frames`);
+  const zipFileName = `${safeBaseFileName}.zip`;
+  const zipPath = path.join(userOutputDir, zipFileName);
+
+  // Verify the resolved zip path is inside userOutputDir to prevent path traversal
+  const resolvedZipPath = path.resolve(zipPath);
+  const resolvedOutputDir = path.resolve(userOutputDir);
+  if (!resolvedZipPath.startsWith(resolvedOutputDir + path.sep)) {
+    throw new Error(`Path traversal detected: zip path escapes output directory`);
+  }
+
+  // Memory safeguard: reject before loading anything if total frame size exceeds 200 MB
+  const MAX_ZIP_BYTES = 200 * 1024 * 1024;
+  let totalFrameSize = 0;
+  for (const frameFile of frameFiles) {
+    const { size } = await stat(path.join(userOutputDir, frameFile));
+    totalFrameSize += size;
+  }
+  if (totalFrameSize > MAX_ZIP_BYTES) {
+    throw new Error(
+      `Total frame size (${Math.round(totalFrameSize / 1024 / 1024)} MB) exceeds the 200 MB zip memory limit`,
+    );
+  }
+
+  const zip = new AdmZip();
+
+  // Add all frame files to the zip
+  for (const frameFile of frameFiles) {
+    const frameFilePath = path.join(userOutputDir, frameFile);
+    console.log(`Adding to zip: ${frameFile}`);
+    zip.addLocalFile(frameFilePath);
+  }
+
+  try {
+    // Write synchronously — no callback, no hanging Promise
+    zip.writeZip(zipPath);
+
+    console.log(`Zip created successfully: ${zipFileName}`);
+
+    // Delete individual frame files only after zip is confirmed written
+    for (const frameFile of frameFiles) {
+      const frameFilePath = path.join(userOutputDir, frameFile);
+      try {
+        await unlink(frameFilePath);
+        console.log(`Deleted frame file: ${frameFile}`);
+      } catch (err) {
+        console.error(`Failed to delete frame file ${frameFile}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  } catch (err) {
+    // Clean up any partial zip, but leave frame files intact
+    const partialExists = await Bun.file(zipPath).exists();
+    if (partialExists) {
+      await unlink(zipPath).catch(() => {});
+    }
+    throw new Error(
+      `Failed to create zip for ${safeBaseFileName}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  return zipFileName;
+}
+
 export async function handleConvert(
   fileNames: string[],
   userUploadsDir: string,
@@ -175,9 +302,10 @@ export async function handleConvert(
       toProcess.push(
         new Promise((resolve, reject) => {
           mainConverter(filePath, fileType, convertTo, targetPath, {}, converterName)
-            .then((r) => {
+            .then(async (r) => {
+              const finalFileName = await handleMultiFrameOutput(targetPath, newFileName, userOutputDir);
               if (jobId.value) {
-                query.run(jobId.value, fileName, newFileName, r);
+                query.run(jobId.value, fileName, finalFileName, r);
               }
               resolve(r);
             })
