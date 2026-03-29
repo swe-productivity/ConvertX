@@ -46,6 +46,20 @@ export const properties = {
       "xml",
       "zabw",
     ],
+    impress: [
+      "ppt",
+      "pptx",
+      "pps",
+      "ppsx",
+      "pptm",
+      "pot",
+      "potx",
+      "potm",
+      "odp",
+      "otp",
+      "fodp",
+      "sxi",
+    ],
   },
   to: {
     text: [
@@ -72,10 +86,19 @@ export const properties = {
       "xhtml",
       "xml",
     ],
+    impress: [
+      "pdf",
+      "ppt",
+      "pptx",
+      "odp",
+      "otp",
+      "fodp",
+      "html",
+    ],
   },
 };
 
-type FileCategories = "text" | "calc";
+type FileCategories = "text" | "calc" | "impress";
 
 const filters: Record<FileCategories, Record<string, string>> = {
   text: {
@@ -121,6 +144,22 @@ const filters: Record<FileCategories, Record<string, string>> = {
     zabw: "AbiWord",
   },
   calc: {},
+  impress: {
+    ppt: "MS PowerPoint 97",
+    pptx: "Impress MS PowerPoint 2007 XML",
+    pps: "MS PowerPoint 97",
+    ppsx: "Impress MS PowerPoint 2007 XML",
+    pptm: "Impress MS PowerPoint 2007 XML VBA",
+    pot: "MS PowerPoint 97 Vorlage",
+    potx: "Impress MS PowerPoint 2007 XML Template",
+    potm: "Impress MS PowerPoint 2007 XML Template",
+    odp: "impress8",
+    otp: "impress8_template",
+    fodp: "OpenDocument Presentation Flat XML",
+    sxi: "StarOffice XML (Impress)",
+    pdf: "impress_pdf_Export",
+    html: "impress_html_Export",
+  },
 };
 
 const getFilters = (fileType: string, converto: string) => {
@@ -128,6 +167,8 @@ const getFilters = (fileType: string, converto: string) => {
     return [filters.text[fileType], filters.text[converto]];
   } else if (fileType in filters.calc && converto in filters.calc) {
     return [filters.calc[fileType], filters.calc[converto]];
+  } else if (fileType in filters.impress && converto in filters.impress) {
+    return [filters.impress[fileType], filters.impress[converto]];
   }
   return [null, null];
 };
@@ -145,6 +186,7 @@ export function convert(
   // Build arguments array
   const args: string[] = [];
   args.push("--headless");
+  args.push("--invisible");
   const [inFilter, outFilter] = getFilters(fileType, convertTo);
 
   if (inFilter) {

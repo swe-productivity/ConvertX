@@ -63,6 +63,7 @@ test("invokes soffice with --headless and outdir derived from targetPath", async
   expect(cmd).toBe("soffice");
   expect(args).toEqual([
     "--headless",
+    "--invisible",
     `--infilter="MS Word 2007 XML"`,
     "--convert-to",
     "odt:writer8",
@@ -78,7 +79,7 @@ test("uses only outFilter when input has no filter (e.g., pdf -> txt)", async ()
   const { args } = requireDefined(calls[0], "Expected at least one execFile call");
 
   expect(args).not.toContainEqual(expect.stringMatching(/^--infilter=/));
-  expect(args).toEqual(["--headless", "--convert-to", "txt", "--outdir", "out", "in.pdf"]);
+  expect(args).toEqual(["--headless", "--invisible", "--convert-to", "txt", "--outdir", "out", "in.pdf"]);
 });
 
 test("uses only infilter when convertTo has no out filter (e.g., docx -> pdf)", async () => {
@@ -87,7 +88,7 @@ test("uses only infilter when convertTo has no out filter (e.g., docx -> pdf)", 
   const { args } = requireDefined(calls[0], "Expected at least one execFile call");
 
   // If docx has an infilter, it should be present
-  expect(args).toEqual(["--headless", "--convert-to", "pdf", "--outdir", "out", "in.docx"]);
+  expect(args).toEqual(["--headless", "--invisible", "--convert-to", "pdf", "--outdir", "out", "in.docx"]);
 
   const i = args.indexOf("--convert-to");
   expect(i).toBeGreaterThanOrEqual(0);
@@ -158,4 +159,70 @@ test("logs stderr on exec error as well", async () => {
 
   // The callback still provided stderr; your implementation logs it before settling
   expect(errors).toContain("stderr: EPIPE");
+});
+
+// --- PowerPoint/Impress conversions ------------------------------------------
+test("converts pptx to pdf with impress filters", async () => {
+  await convert("in.pptx", "pptx", "pdf", "out/out.pdf", undefined, mockExecFile);
+
+  const { cmd, args } = requireDefined(calls[0], "Expected at least one execFile call");
+  expect(cmd).toBe("soffice");
+  expect(args).toEqual([
+    "--headless",
+    "--invisible",
+    `--infilter="Impress MS PowerPoint 2007 XML"`,
+    "--convert-to",
+    "pdf:impress_pdf_Export",
+    "--outdir",
+    "out",
+    "in.pptx",
+  ]);
+});
+
+test("converts ppt to pdf with impress filters", async () => {
+  await convert("in.ppt", "ppt", "pdf", "out/out.pdf", undefined, mockExecFile);
+
+  const { args } = requireDefined(calls[0], "Expected at least one execFile call");
+  expect(args).toEqual([
+    "--headless",
+    "--invisible",
+    `--infilter="MS PowerPoint 97"`,
+    "--convert-to",
+    "pdf:impress_pdf_Export",
+    "--outdir",
+    "out",
+    "in.ppt",
+  ]);
+});
+
+test("converts pptx to odp with impress filters", async () => {
+  await convert("in.pptx", "pptx", "odp", "out/out.odp", undefined, mockExecFile);
+
+  const { args } = requireDefined(calls[0], "Expected at least one execFile call");
+  expect(args).toEqual([
+    "--headless",
+    "--invisible",
+    `--infilter="Impress MS PowerPoint 2007 XML"`,
+    "--convert-to",
+    "odp:impress8",
+    "--outdir",
+    "out",
+    "in.pptx",
+  ]);
+});
+
+test("converts odp to pptx with impress filters", async () => {
+  await convert("in.odp", "odp", "pptx", "out/out.pptx", undefined, mockExecFile);
+
+  const { args } = requireDefined(calls[0], "Expected at least one execFile call");
+  expect(args).toEqual([
+    "--headless",
+    "--invisible",
+    `--infilter="impress8"`,
+    "--convert-to",
+    "pptx:Impress MS PowerPoint 2007 XML",
+    "--outdir",
+    "out",
+    "in.odp",
+  ]);
 });
