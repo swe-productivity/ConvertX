@@ -103,6 +103,7 @@ All are optional, JWT_SECRET is recommended to be set.
 | MAX_CONVERT_PROCESS          | 0                                                  | Maximum number of concurrent conversion processes allowed. Set to 0 for unlimited.                                                                            |
 | MAGICK_MAX_WIDTH             | 8000                                               | (Docker only) ImageMagick maximum image width in pixels                                                                                                       |
 | MAGICK_MAX_HEIGHT            | 8000                                               | (Docker only) ImageMagick maximum image height in pixels                                                                                                      |
+| PORT                         | 3000                                               | Application listen port                                                                                                                                       |
 
 ### Docker images
 
